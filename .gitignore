@@ -1,0 +1,34 @@
+# Environment files
+.env
+*.env.local
+
+# Build artifacts
+build/
+*/build/
+modules/*/build/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+*.pem
+*.key
+*.cert

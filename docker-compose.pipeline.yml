@@ -1,0 +1,80 @@
+# ─── Pipeline Compose: Runs the full pipeline with Unix pipe chaining ───
+# Usage: docker compose -f docker-compose.pipeline.yml up
+#
+# This wires: sensor_simulator | data_filter | analytics_alert
+# using named pipes (FIFOs) mounted as volumes.
+
+version: "3.8"
+
+services:
+  # Creates named pipes for inter-module communication
+  pipe-setup:
+    image: busybox
+    container_name: pipe-setup
+    command: >
+      sh -c "
+        rm -f /pipes/sensor-to-filter /pipes/filter-to-analytics &&
+        mkfifo /pipes/sensor-to-filter /pipes/filter-to-analytics &&
+        echo 'Pipes created' &&
+        sleep infinity
+      "
+    volumes:
+      - pipes:/pipes
+
+  sensor-simulator:
+    build:
+      context: ./modules/sensor_simulator
+      dockerfile: Dockerfile
+    container_name: sensor-simulator-pipe
+    # Redirect stdout to named pipe
+    command: >
+      sh -c "sensor_simulator > /pipes/sensor-to-filter"
+    environment:
+      - TELEMETRY_INTERVAL_MS=${TELEMETRY_INTERVAL_MS:-3000}
+      - SENSOR_ID=${SENSOR_ID:-temp-sensor-001}
+    depends_on:
+      - pipe-setup
+    volumes:
+      - pipes:/pipes
+    restart: unless-stopped
+
+  data-filter:
+    build:
+      context: ./modules/data_filter
+      dockerfile: Dockerfile
+    container_name: data-filter-pipe
+    # Read from sensor pipe, write to analytics pipe
+    command: >
+      sh -c "data_filter < /pipes/sensor-to-filter > /pipes/filter-to-analytics"
+    environment:
+      - TEMP_MIN_VALID=${TEMP_MIN_VALID:--40.0}
+      - TEMP_MAX_VALID=${TEMP_MAX_VALID:-85.0}
+      - NOISE_THRESHOLD=${NOISE_THRESHOLD:-0.5}
+    depends_on:
+      - pipe-setup
+      - sensor-simulator
+    volumes:
+      - pipes:/pipes
+    restart: unless-stopped
+
+  analytics-alert:
+    build:
+      context: ./modules/analytics_alert
+      dockerfile: Dockerfile
+    container_name: analytics-alert-pipe
+    # Read from filter pipe, print alerts to stdout
+    command: >
+      sh -c "python -u main.py < /pipes/filter-to-analytics"
+    environment:
+      - ALERT_TEMP_HIGH=${ALERT_TEMP_HIGH:-35.0}
+      - ALERT_TEMP_LOW=${ALERT_TEMP_LOW:--10.0}
+      - ROLLING_WINDOW_SIZE=${ROLLING_WINDOW_SIZE:-10}
+    depends_on:
+      - pipe-setup
+      - data-filter
+    volumes:
+      - pipes:/pipes
+    restart: unless-stopped
+
+volumes:
+  pipes:

@@ -1,0 +1,57 @@
+# ─── Local Development Docker Compose ───
+# Simulates the IoT Edge pipeline without Azure IoT Edge runtime.
+# Modules communicate via Unix pipes (stdin/stdout) in standalone mode.
+#
+# For full IoT Edge simulation, use `iotedgehubdev` instead (see scripts/run-edge-sim.sh).
+
+version: "3.8"
+
+services:
+  # ─── Sensor Simulator ───
+  sensor-simulator:
+    build:
+      context: ./modules/sensor_simulator
+      dockerfile: Dockerfile
+      args:
+        - CMAKE_BUILD_TYPE=Release
+    container_name: sensor-simulator
+    environment:
+      - TELEMETRY_INTERVAL_MS=${TELEMETRY_INTERVAL_MS:-3000}
+      - SENSOR_ID=${SENSOR_ID:-temp-sensor-001}
+    restart: unless-stopped
+    networks:
+      - iot-edge-net
+
+  # ─── Data Filter ───
+  data-filter:
+    build:
+      context: ./modules/data_filter
+      dockerfile: Dockerfile
+      args:
+        - CMAKE_BUILD_TYPE=Release
+    container_name: data-filter
+    environment:
+      - TEMP_MIN_VALID=${TEMP_MIN_VALID:--40.0}
+      - TEMP_MAX_VALID=${TEMP_MAX_VALID:-85.0}
+      - NOISE_THRESHOLD=${NOISE_THRESHOLD:-0.5}
+    restart: unless-stopped
+    networks:
+      - iot-edge-net
+
+  # ─── Analytics & Alert ───
+  analytics-alert:
+    build:
+      context: ./modules/analytics_alert
+      dockerfile: Dockerfile
+    container_name: analytics-alert
+    environment:
+      - ALERT_TEMP_HIGH=${ALERT_TEMP_HIGH:-35.0}
+      - ALERT_TEMP_LOW=${ALERT_TEMP_LOW:--10.0}
+      - ROLLING_WINDOW_SIZE=${ROLLING_WINDOW_SIZE:-10}
+    restart: unless-stopped
+    networks:
+      - iot-edge-net
+
+networks:
+  iot-edge-net:
+    driver: bridge

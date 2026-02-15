@@ -1,0 +1,134 @@
+{
+  "$schema-template": "2.0.0",
+  "modulesContent": {
+    "$edgeAgent": {
+      "properties.desired": {
+        "schemaVersion": "1.1",
+        "runtime": {
+          "type": "docker",
+          "settings": {
+            "minDockerVersion": "v1.25",
+            "loggingOptions": "",
+            "registryCredentials": {
+              "myregistry": {
+                "username": "${CONTAINER_REGISTRY_USERNAME}",
+                "password": "${CONTAINER_REGISTRY_PASSWORD}",
+                "address": "${CONTAINER_REGISTRY}"
+              }
+            }
+          }
+        },
+        "systemModules": {
+          "edgeAgent": {
+            "type": "docker",
+            "settings": {
+              "image": "mcr.microsoft.com/azureiotedge-agent:1.5",
+              "createOptions": "{}"
+            }
+          },
+          "edgeHub": {
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "mcr.microsoft.com/azureiotedge-hub:1.5",
+              "createOptions": "{\"HostConfig\":{\"PortBindings\":{\"5671/tcp\":[{\"HostPort\":\"5671\"}],\"8883/tcp\":[{\"HostPort\":\"8883\"}],\"443/tcp\":[{\"HostPort\":\"443\"}]}}}"
+            },
+            "env": {
+              "OptimizeForPerformance": {
+                "value": "false"
+              }
+            }
+          }
+        },
+        "modules": {
+          "sensorSimulator": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${CONTAINER_REGISTRY}/sensor-simulator:${SENSOR_SIMULATOR_VERSION}",
+              "createOptions": "{}"
+            },
+            "env": {
+              "TELEMETRY_INTERVAL_MS": {
+                "value": "${TELEMETRY_INTERVAL_MS}"
+              },
+              "SENSOR_ID": {
+                "value": "${SENSOR_ID}"
+              }
+            }
+          },
+          "dataFilter": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${CONTAINER_REGISTRY}/data-filter:${DATA_FILTER_VERSION}",
+              "createOptions": "{}"
+            },
+            "env": {
+              "TEMP_MIN_VALID": {
+                "value": "${TEMP_MIN_VALID}"
+              },
+              "TEMP_MAX_VALID": {
+                "value": "${TEMP_MAX_VALID}"
+              },
+              "NOISE_THRESHOLD": {
+                "value": "${NOISE_THRESHOLD}"
+              }
+            }
+          },
+          "analyticsAlert": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${CONTAINER_REGISTRY}/analytics-alert:${ANALYTICS_ALERT_VERSION}",
+              "createOptions": "{}"
+            },
+            "env": {
+              "ALERT_TEMP_HIGH": {
+                "value": "${ALERT_TEMP_HIGH}"
+              },
+              "ALERT_TEMP_LOW": {
+                "value": "${ALERT_TEMP_LOW}"
+              },
+              "ROLLING_WINDOW_SIZE": {
+                "value": "${ROLLING_WINDOW_SIZE}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "$edgeHub": {
+      "properties.desired": {
+        "schemaVersion": "1.1",
+        "routes": {
+          "sensorToFilter": {
+            "route": "FROM /messages/modules/sensorSimulator/outputs/sensorOutput INTO BrokeredEndpoint(\"/modules/dataFilter/inputs/filterInput\")",
+            "priority": 0,
+            "timeToLiveSecs": 7200
+          },
+          "filterToAnalytics": {
+            "route": "FROM /messages/modules/dataFilter/outputs/filterOutput INTO BrokeredEndpoint(\"/modules/analyticsAlert/inputs/analyticsInput\")",
+            "priority": 0,
+            "timeToLiveSecs": 7200
+          },
+          "alertsToHub": {
+            "route": "FROM /messages/modules/analyticsAlert/outputs/alertOutput INTO $upstream",
+            "priority": 0,
+            "timeToLiveSecs": 7200
+          }
+        },
+        "storeAndForwardConfiguration": {
+          "timeToLiveSecs": 7200
+        }
+      }
+    }
+  }
+}
