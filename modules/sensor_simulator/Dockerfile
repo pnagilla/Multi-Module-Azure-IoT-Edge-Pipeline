@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . .
 
-RUN mkdir build && cd build \
+RUN mkdir -p build && cd build \
     && cmake .. -DCMAKE_BUILD_TYPE=Release -DSTANDALONE_MODE=OFF \
     && make -j$(nproc)
 
